@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AN/PRC-77 — Radio Set Simulator</title>
+<meta name="description" content="A working simulation of the AN/PRC-77 tactical VHF FM radio set, with tuning, 150 Hz tone squelch and a physical propagation model.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="page-head">
+  <h1>Radio Set AN/PRC-77</h1>
+  <p class="sub">Receiver-Transmitter, Radio RT-841/PRC-77 &middot; 30.00&ndash;75.95 MHz FM &middot; 920 channels</p>
+</header>
+
+<main>
+
+<!-- ===================================================================== -->
+<section class="station" id="station-alpha">
+  <div class="rt841">
+
+    <div class="panel-top">
+      <div class="connector ant" title="ANT — antenna connector">
+        <span class="conn-body"></span><span class="conn-label">ANT</span>
+      </div>
+      <div class="nameplate">
+        <span class="np-main">RT-841/PRC-77</span>
+        <span class="np-sub">RECEIVER-TRANSMITTER, RADIO</span>
+      </div>
+      <div class="connector audio" title="AUDIO — U-229 handset connector">
+        <span class="conn-body"></span><span class="conn-label">AUDIO</span>
+      </div>
+    </div>
+
+    <!-- Frequency dial window -->
+    <div class="dial-window" id="dial-window">
+      <div class="dial-pane">
+        <span class="dial-legend">MHz</span>
+        <span class="dial-digits" id="dial-mhz">30</span>
+      </div>
+      <span class="dial-dot">.</span>
+      <div class="dial-pane">
+        <span class="dial-legend">kHz</span>
+        <span class="dial-digits" id="dial-khz">00</span>
+      </div>
+      <div class="dial-meta">
+        <span id="dial-channel">CH 1</span>
+        <span id="dial-band-echo">BAND A</span>
+      </div>
+    </div>
+
+    <!-- Tuning controls -->
+    <div class="tuning">
+      <div class="knob-group">
+        <div class="knob" id="knob-mhz" role="slider" tabindex="0"
+             aria-label="Megahertz tuning control" aria-valuemin="0" aria-valuemax="22" aria-valuenow="0">
+          <div class="knob-face"><span class="knob-mark"></span></div>
+        </div>
+        <span class="knob-label">MHz</span>
+        <div class="preset-lever" id="lever-mhz" title="PRESET lever"><span></span></div>
+      </div>
+
+      <div class="knob-group">
+        <div class="knob" id="knob-khz" role="slider" tabindex="0"
+             aria-label="Kilohertz tuning control" aria-valuemin="0" aria-valuemax="19" aria-valuenow="0">
+          <div class="knob-face"><span class="knob-mark"></span></div>
+        </div>
+        <span class="knob-label">kHz</span>
+        <div class="preset-lever" id="lever-khz" title="PRESET lever"><span></span></div>
+      </div>
+    </div>
+
+    <div class="preset-bar">
+      <button type="button" class="preset-btn" id="preset-select-low" disabled>&#9664; PRESET</button>
+      <button type="button" class="lever-toggle" id="preset-lever-toggle">LEVERS BACK</button>
+      <button type="button" class="preset-btn" id="preset-select-high" disabled>PRESET &#9654;</button>
+    </div>
+
+    <!-- Lower control row -->
+    <div class="panel-bottom">
+      <div class="ctl band-ctl">
+        <span class="ctl-label">BAND</span>
+        <div class="band-switch" id="band-switch">
+          <button type="button" data-band="A" class="active">30-52</button>
+          <button type="button" data-band="B">53-75</button>
+        </div>
+      </div>
+
+      <div class="ctl function-ctl">
+        <span class="ctl-label">FUNCTION</span>
+        <div class="function-switch" id="function-switch">
+          <button type="button" data-func="OFF" class="active">OFF</button>
+          <button type="button" data-func="ON">ON</button>
+          <button type="button" data-func="SQUELCH">SQUELCH</button>
+          <button type="button" data-func="RETRANS">RETRANS</button>
+          <button type="button" data-func="LITE">LITE</button>
+        </div>
+      </div>
+
+      <div class="ctl volume-ctl">
+        <span class="ctl-label">VOLUME</span>
+        <input type="range" id="volume" min="1" max="10" step="1" value="4" aria-label="Volume">
+        <span class="volume-read" id="volume-read">4</span>
+      </div>
+    </div>
+
+  </div><!-- /.rt841 -->
+
+  <!-- Handset -->
+  <div class="handset">
+    <button type="button" id="ptt" class="ptt" aria-pressed="false">
+      <span class="ptt-key">PUSH&nbsp;TO&nbsp;TALK</span>
+      <span class="ptt-hint">hold, or hold <kbd>Space</kbd></span>
+    </button>
+    <div class="handset-state">
+      <span class="lamp" id="lamp-state"></span>
+      <span id="handset-text">Set FUNCTION away from OFF</span>
+    </div>
+    <button type="button" id="audio-toggle" class="audio-toggle">Enable handset audio</button>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<aside class="side">
+
+  <section class="card" id="card-link">
+    <h2>Link to BRAVO</h2>
+    <div class="readout" id="link-readout">
+      <div class="ro"><span>Received</span><b id="ro-rx">&mdash;</b></div>
+      <div class="ro"><span>Margin</span><b id="ro-margin">&mdash;</b></div>
+      <div class="ro"><span>Path loss</span><b id="ro-loss">&mdash;</b></div>
+      <div class="ro"><span>Distance</span><b id="ro-dist">&mdash;</b></div>
+      <div class="ro"><span>Horizon</span><b id="ro-los">&mdash;</b></div>
+      <div class="ro"><span>Readability</span><b id="ro-read">&mdash;</b></div>
+      <div class="ro"><span>Noise floor</span><b id="ro-noise">&mdash;</b></div>
+      <div class="ro"><span>Usable sens.</span><b id="ro-sens">&mdash;</b></div>
+    </div>
+    <div class="signal-bar"><div class="signal-fill" id="signal-fill"></div></div>
+    <p class="diag" id="diagnosis"></p>
+  </section>
+
+  <section class="card">
+    <h2>Situation</h2>
+    <label class="field">
+      <span>Distance to BRAVO <b id="lbl-dist">2.0 km</b></span>
+      <input type="range" id="in-distance" min="50" max="30000" step="50" value="2000">
+    </label>
+    <label class="field">
+      <span>Your antenna</span>
+      <select id="in-antenna">
+        <option value="AT-892">AT-892/PRC-25 — 3 ft tape</option>
+        <option value="AT-271A" selected>AT-271A/PRC — 10 ft whip</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Your antenna height <b id="lbl-height">1.5 m</b></span>
+      <input type="range" id="in-height" min="1" max="60" step="0.5" value="1.5">
+    </label>
+    <label class="field">
+      <span>Terrain</span>
+      <select id="in-terrain">
+        <option value="open">Open ground</option>
+        <option value="rolling">Rolling</option>
+        <option value="lightWoods">Light woods</option>
+        <option value="denseWoods">Dense woods</option>
+        <option value="urban">Built-up</option>
+        <option value="valley">Valley / low ground</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Electrical noise at your site</span>
+      <select id="in-noise">
+        <option value="quietRural">Quiet rural</option>
+        <option value="rural">Rural</option>
+        <option value="residential">Residential</option>
+        <option value="urban">Urban / business</option>
+      </select>
+    </label>
+    <p class="note" id="siting-note"></p>
+  </section>
+
+  <section class="card">
+    <h2>Station BRAVO</h2>
+    <div class="bravo-freq">
+      <span class="bravo-dial" id="bravo-dial">35.00</span>
+      <div class="bravo-tune">
+        <button type="button" data-b="mhz" data-d="-1">MHz &minus;</button>
+        <button type="button" data-b="mhz" data-d="1">MHz +</button>
+        <button type="button" data-b="khz" data-d="-1">kHz &minus;</button>
+        <button type="button" data-b="khz" data-d="1">kHz +</button>
+      </div>
+    </div>
+    <label class="field">
+      <span>BRAVO FUNCTION</span>
+      <select id="bravo-func">
+        <option value="OFF">OFF</option>
+        <option value="ON" selected>ON</option>
+        <option value="SQUELCH">SQUELCH</option>
+      </select>
+    </label>
+    <label class="check">
+      <input type="checkbox" id="bravo-tone" checked>
+      <span>Transmits the 150 Hz squelch tone</span>
+    </label>
+    <p class="note">Clear this to simulate an AN/PRC-25 or a defective A54 squelch
+      module. Your set will then hear nothing in SQUELCH &mdash; and everything in ON.</p>
+    <button type="button" id="bravo-ptt" class="bravo-key">BRAVO transmits (hold)</button>
+  </section>
+
+  <section class="card">
+    <h2>Set state</h2>
+    <div class="readout">
+      <div class="ro"><span>Frequency</span><b id="st-freq">&mdash;</b></div>
+      <div class="ro"><span>Channel</span><b id="st-chan">&mdash;</b></div>
+      <div class="ro"><span>Battery</span><b id="st-batt">&mdash;</b></div>
+      <div class="ro"><span>Terminal V</span><b id="st-volts">&mdash;</b></div>
+      <div class="ro"><span>Antenna gain</span><b id="st-gain">&mdash;</b></div>
+      <div class="ro"><span>Est. life 9:1</span><b id="st-life">&mdash;</b></div>
+    </div>
+    <ul class="faults" id="faults"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Presets</h2>
+    <p class="note">Two channels, held on mechanical stops. The counter-clockwise
+      stop takes whichever frequency sits lower <em>within its own band</em> —
+      not the lower frequency.</p>
+    <div class="preset-inputs">
+      <label><span>Preset 1</span><input type="text" id="pre1" value="54.00" inputmode="decimal"></label>
+      <label><span>Preset 2</span><input type="text" id="pre2" value="33.00" inputmode="decimal"></label>
+      <button type="button" id="pre-set">Set stops</button>
+    </div>
+    <p class="note" id="preset-result"></p>
+  </section>
+
+</aside>
+</main>
+
+<footer class="page-foot">
+  <p>Controls, tuning, squelch logic and battery figures are taken from the
+     manufacturer data sheet and the AN/PRC-77 user handbook. Range is not
+     taken from anything &mdash; it is computed from antenna theory and
+     two-ray path loss, and lands on the published 8 km planning figure on its
+     own. See the README for what is exact, what is modelled, and what was
+     deliberately left out.</p>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

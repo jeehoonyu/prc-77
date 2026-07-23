@@ -1,0 +1,12 @@
+{
+  "name": "prc-77",
+  "version": "1.0.0",
+  "description": "A working simulation of Radio Set AN/PRC-77 (RT-841/PRC-77), with manual-accurate controls, 150 Hz tone squelch, and a physical VHF propagation model.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/radio.test.js && node test/propagation.test.js && node test/net.test.js",
+    "serve": "python -m http.server 8000"
+  },
+  "keywords": ["prc-77", "rt-841", "radio", "vhf", "propagation", "military", "simulation"],
+  "license": "MIT"
+}
