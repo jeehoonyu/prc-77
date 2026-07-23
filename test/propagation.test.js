@@ -15,6 +15,10 @@ import {
   externalNoiseDBm, effectiveSensitivityDBm,
 } from '../js/propagation.js';
 import { PLANNING_RANGE_KM } from '../js/config.js';
+import { ALLOWANCES_DB, ALLOWANCE_KEYS } from '../js/allowances.js';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let passed = 0, failed = 0;
 function near(name, actual, expected, tol) {
@@ -102,6 +106,40 @@ console.log('\n2) Path loss against closed-form results');
   // Two-ray breakpoint: 4*pi*h1*h2/lambda.
   near('two-ray breakpoint', breakpointM(1.5, 1.5, 50e6),
     4 * Math.PI * 1.5 * 1.5 / (C / 50e6), 0.01);
+}
+{
+  // The closed-form plane-earth formula against an explicit phasor sum of the
+  // direct and ground-reflected rays, with the grazing reflection coefficient
+  // taken as -1.
+  //
+  // Be honest about what this proves. The closed form IS the small-angle limit
+  // of this sum, so the two are not independent — this catches a transposed
+  // exponent or a dropped factor, not a wrong choice of model. It is a
+  // consistency check, and the README says so.
+  const twoRayPhasorDB = (d, h1, h2, freqHz) => {
+    const lambda = C / freqHz, k = 2 * Math.PI / lambda;
+    const dLos = Math.hypot(d, h1 - h2);
+    const dRef = Math.hypot(d, h1 + h2);
+    const dPhi = k * (dRef - dLos);
+    const re = 1 / dLos - Math.cos(dPhi) / dRef;   // reflected ray carries -1
+    const im = -Math.sin(dPhi) / dRef;
+    return -20 * Math.log10(Math.hypot(re, im) * lambda / (4 * Math.PI));
+  };
+
+  let worst = 0;
+  for (const f of [30e6, 50e6, 75.95e6]) {
+    for (const [h1, h2] of [[1.5, 1.5], [1.5, 3], [30, 1.5], [10, 10]]) {
+      // Valid only well past the breakpoint; inside it the true sum still has
+      // interference lobes that the closed form deliberately does not model.
+      const start = breakpointM(h1, h2, f) * 20;
+      for (const d of [start, start * 4, start * 20, 30000]) {
+        if (d < start) continue;
+        worst = Math.max(worst, Math.abs(twoRayPhasorDB(d, h1, h2, f) - planeEarthLossDB(d, h1, h2)));
+      }
+    }
+  }
+  assert('plane-earth closed form matches an explicit two-ray phasor sum past the breakpoint',
+    worst < 0.01, `worst disagreement ${worst.toFixed(4)} dB`);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +296,50 @@ console.log('\n8) Link budget and readability');
     last = m;
   }
   assert('margin decreases monotonically with distance', mono);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n9) The allowance registry is complete');
+{
+  // The README offers ALLOWANCES_DB as its answer to "where are your fudge
+  // factors". That promise is only worth anything if the registry cannot fall
+  // behind the code — and it had, silently, by three entries. So the rule is
+  // enforced rather than asserted: every `// ALLOWANCE:` tag in the engine
+  // sources must name a constant that appears in the registry.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const sources = ['config.js', 'propagation.js'];
+  const tagged = [];
+
+  for (const file of sources) {
+    const lines = readFileSync(join(here, '..', 'js', file), 'utf8').split(/\r?\n/);
+    lines.forEach((line, i) => {
+      if (!/^\s*\/\/\s*ALLOWANCE:/.test(line)) return;
+      // Walk forward to the declaration the tag introduces.
+      for (let j = i + 1; j < Math.min(i + 30, lines.length); j++) {
+        const m = lines[j].match(/^export const (\w+)/);
+        if (m) { tagged.push({ file, name: m[1], line: i + 1 }); return; }
+        if (/^\s*\/\/\s*ALLOWANCE:/.test(lines[j])) break; // next tag, none found
+      }
+      tagged.push({ file, name: null, line: i + 1 });
+    });
+  }
+
+  assert('found ALLOWANCE tags in the engine sources', tagged.length >= 10,
+    `${tagged.length} tags`);
+  const orphaned = tagged.filter((t) => !t.name);
+  assert('every ALLOWANCE tag introduces an exported constant',
+    orphaned.length === 0,
+    orphaned.map((o) => `${o.file}:${o.line}`).join(', ') || 'none orphaned');
+
+  const missing = tagged.filter((t) => t.name && !ALLOWANCE_KEYS.includes(t.name));
+  assert('every tagged ALLOWANCE appears in the registry',
+    missing.length === 0,
+    missing.map((m) => `${m.file}:${m.line} ${m.name}`).join(', ') || `all ${tagged.length} registered`);
+
+  // And nothing in the registry is a value that no longer exists.
+  const undefinedEntries = ALLOWANCE_KEYS.filter((k) => ALLOWANCES_DB[k] === undefined);
+  assert('no registry entry is undefined', undefinedEntries.length === 0,
+    undefinedEntries.join(', ') || `${ALLOWANCE_KEYS.length} entries`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "test": "node test/radio.test.js && node test/propagation.test.js && node test/net.test.js",
-    "serve": "python -m http.server 8000"
+    "serve": "node tools/serve.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "keywords": ["prc-77", "rt-841", "radio", "vhf", "propagation", "military", "simulation"],
   "license": "MIT"

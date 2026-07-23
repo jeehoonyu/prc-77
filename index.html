@@ -241,11 +241,26 @@
   <p>Controls, tuning, squelch logic and battery figures are taken from the
      manufacturer data sheet and the AN/PRC-77 user handbook. Range is not
      taken from anything &mdash; it is computed from antenna theory and
-     two-ray path loss, and lands on the published 8 km planning figure on its
-     own. See the README for what is exact, what is modelled, and what was
-     deliberately left out.</p>
+     two-ray path loss, and comes out at 7.4 km against the published 8 km
+     planning figure. See the README for what is exact, what is modelled, and
+     what was deliberately left out.</p>
 </footer>
 
+<!-- Classic (non-module) script, so it still runs when the module below cannot.
+     Opening this file from disk leaves a fully styled panel that does nothing,
+     which looks like a broken project rather than an unsupported protocol. -->
+<script>
+if (location.protocol === 'file:') {
+  document.addEventListener('DOMContentLoaded', function () {
+    var p = document.createElement('p');
+    p.className = 'file-warning';
+    p.textContent = 'This page loads its JavaScript as ES modules, which browsers refuse to '
+      + 'resolve from a file:// origin — so the panel below is inert. Serve the directory '
+      + 'over HTTP instead: run "npm run serve" and open http://localhost:8000.';
+    document.body.prepend(p);
+  });
+}
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

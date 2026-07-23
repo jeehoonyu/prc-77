@@ -16,7 +16,7 @@ import {
   BANDS, MHZ_DETENTS_PER_BAND, KHZ_DETENTS, KHZ_STEP_KHZ, TOTAL_CHANNELS,
   FUNCTION_POSITIONS, VOLUME_MIN, VOLUME_MAX, VOLUME_DEFAULT,
   BATTERY_CAPACITY_AH, CURRENT_TX_A, CURRENT_RX_A, BATTERY_NOMINAL_V,
-  BATTERY_MIN_V, WARMUP_S, ANTENNAS, RETRANS_MIN_SEPARATION_MHZ,
+  BATTERY_MIN_V, WARMUP_S, ANTENNAS, RETRANS_MIN_SEPARATION_MHZ, BATTERY_CURVE,
 } from './config.js';
 
 const FUNCTION_IDS = FUNCTION_POSITIONS.map((p) => p.id);
@@ -174,8 +174,9 @@ export class RT841 {
   get openCircuitVoltage() {
     const frac = this.batteryFraction;
     if (frac <= 0) return 0;
-    const plateau = BATTERY_NOMINAL_V - 1.2 * (1 - frac);
-    const collapse = 14 * Math.max(0, 0.01 - frac) / 0.01; // final cliff
+    const B = BATTERY_CURVE;
+    const plateau = BATTERY_NOMINAL_V - B.plateauDropV * (1 - frac);
+    const collapse = B.cliffDropV * Math.max(0, B.cliffFraction - frac) / B.cliffFraction;
     return Math.max(0, plateau - collapse);
   }
 
@@ -194,10 +195,11 @@ export class RT841 {
    * formula said 30 h while the simulation said 21 h. Those must agree.
    */
   get internalResistance() {
+    const B = BATTERY_CURVE;
     const spent = 1 - this.batteryFraction;
-    return 0.5
-      + 1.5 * Math.pow(spent, 6)                                  // gradual rise
-      + 8 * Math.max(0, 0.03 - this.batteryFraction) / 0.03;      // end-of-life knee
+    return B.baseResistanceOhm
+      + B.riseResistanceOhm * Math.pow(spent, B.riseExponent)            // gradual rise
+      + B.kneeResistanceOhm * Math.max(0, B.kneeFraction - this.batteryFraction) / B.kneeFraction;
   }
 
   voltageUnderLoad(amps) {

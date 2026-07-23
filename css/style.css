@@ -31,6 +31,17 @@ body {
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* Shown only when the page is opened from disk — see the classic script at the
+   bottom of index.html. */
+.file-warning {
+  margin: 0;
+  padding: 1rem 1.5rem;
+  background: #4a2318;
+  border-bottom: 2px solid var(--red);
+  color: #ffd9d3;
+  font-size: .88rem;
+}
+
 .page-head {
   padding: 1.6rem 1.5rem 1rem;
   border-bottom: 1px solid var(--card-line);

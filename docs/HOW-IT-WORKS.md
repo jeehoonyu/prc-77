@@ -8,7 +8,7 @@ each part stands alone.
 
 ## 1. The shape of the thing
 
-Four modules, three of them free of any DOM reference so they run identically
+Six modules, three of them free of any DOM reference so they run identically
 in the browser and under Node:
 
 ```
@@ -19,9 +19,11 @@ config.js        every published constant, each with its citation
    +--> propagation.js  antennas and path loss — pure physics, no radio state
    |
    +--> net.js          couples radios: who hears whom, and how well
-            |
-            +--> audio.js   Web Audio handset
-            +--> app.js     panel wiring
+   |        |
+   |        +--> audio.js   Web Audio handset
+   |        +--> app.js     panel wiring
+   |
+   +--> allowances.js   audit registry of every non-sourced constant
 ```
 
 The dependency arrows only point one way. `propagation.js` knows nothing about
@@ -116,7 +118,10 @@ mean current at 9:1  = 0.9 x 0.060 + 0.1 x 0.780 = 0.132 A
 3.96 Ah / 0.132 A    = 30.0 h
 ```
 
-which is the published figure. It is a cross-check, not an input.
+which is the published figure — but note what that is and is not. The capacity
+was itself back-solved from the published life, so this division cannot return
+anything else. It is bookkeeping, not a result. The check that could have failed
+is the simulated mission below.
 
 Terminal voltage comes from an open-circuit curve minus `I x R_internal`, and
 internal resistance climbs as the cells deplete. That single mechanism produces
@@ -132,7 +137,8 @@ comfortably above it. Simulated on a real 9:1 duty cycle: transmit-capable for
 
 > **This was wrong at first and is worth recording.** The original curve killed
 > transmit at 21.5 h with 28% of the battery unused — so `batteryLifeHours(9)`
-> claimed 30 h while an actual simulated mission gave 21.5 h. A headline figure
+> claimed 30 h while an actual simulated mission gave 21.5 h (both figures
+> historical; the curve has since been reshaped). A headline figure
 > the simulation cannot reproduce is worse than no figure. There is now a test
 > that runs the mission minute by minute and requires the two to agree.
 
@@ -168,7 +174,10 @@ figure is a **validation target**, never an input.
 
 ### 3.1 Antenna gain
 
-Exact monopole far-field pattern for a sinusoidal current distribution:
+Monopole far-field pattern, assuming a sinusoidal current distribution — the
+standard thin-wire approximation, not an exact solution. It is least accurate
+near anti-resonance, which is exactly where the 10 ft whip is most interesting,
+so treat that region as indicative:
 
 ```
 F(θ) = [cos(kh·cosθ) − cos(kh)] / sinθ        θ = π/2 is the horizon
@@ -215,9 +224,14 @@ So essentially every real link is in the fourth-power regime, where loss climbs
 This is why the handbook's siting advice matters so much: the `20log10(h₁h₂)`
 term means antenna height buys 6 dB per doubling, at *both* ends.
 
-The closed-form plane-earth formula was checked against an explicit two-ray
-phasor sum of the direct and ground-reflected rays. They agree to **0.01 dB**
-at every distance tested.
+The closed-form plane-earth formula is checked against an explicit two-ray
+phasor sum of the direct and ground-reflected rays; they agree to **0.01 dB**
+past about twenty times the breakpoint. Inside that the closed form is wrong by
+design — the true sum still has interference lobes there, which is why
+`pathLossDB()` takes the greater of free-space and plane-earth rather than
+switching between them at the breakpoint. And be clear what the check is worth:
+the closed form *is* the small-angle limit of that sum, so this catches a
+transposed exponent, not a wrong choice of model.
 
 Past the radio horizon (4/3 earth, `4.12(√h₁+√h₂)` km) a diffraction penalty
 ramps in, and a clutter allowance covers the site types the handbook warns
@@ -305,7 +319,7 @@ move one to twice the distance and — in the fourth-power regime — it falls
 |---|---|---|
 | OFF | anything | dead |
 | ON | nothing | rushing noise |
-| ON | any signal | audio — tone or not |
+| ON | any signal above threshold | audio — tone or not |
 | SQUELCH | nothing | silent |
 | SQUELCH | signal **without** 150 Hz tone | **silent** |
 | SQUELCH | signal **with** 150 Hz tone | audio |
@@ -316,8 +330,9 @@ an AN/PRC-25, or a failed A54 squelch module — and it is indistinguishable fro
 a dead radio.
 
 The simulator reports the suppressed signal in `suppressedSignal` rather than
-hiding it, so the UI can tell you a 50 dB signal is sitting right there being
-held out.
+hiding it, so the UI can tell you the signal is sitting right there being held
+out — +21 dB of margin at the shipped 2 km default, which the readout calls
+*Good*.
 
 This is exactly why the netting drill starts both stations in `ON`:
 
@@ -347,7 +362,7 @@ need a loop guard and are not attempted.
 ## 5. Checking it yourself
 
 ```bash
-npm test        # 170 tests, three suites
+npm test        # 175 tests, three suites
 ```
 
 The suites are ordered deliberately. `propagation.test.js` checks closed-form
@@ -380,8 +395,10 @@ remote-control range — both figures are recorded and the choice is justified i
 a comment.
 
 Everything in `propagation.js` that is *not* derived from first principles is
-tagged `ALLOWANCE` and collected in `ALLOWANCES_DB`: counterpoise loss
-resistance, matching-network loss bounds, clutter figures, IF bandwidth. They
+tagged `ALLOWANCE` and collected in `js/allowances.js`: counterpoise and
+matching losses, clutter, diffraction, IF bandwidth, capture ratio,
+adjacent-channel rejection, readability thresholds, the battery curve. A test
+scans the sources and fails if a tagged value is missing from the registry. They
 are gathered in one place specifically so they can be inspected and argued
 with rather than buried in the middle of a formula.
 

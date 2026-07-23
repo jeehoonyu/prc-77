@@ -23,7 +23,9 @@
 // the handbook's netting drill has both stations start in ON.
 
 import { linkBudget, readability } from './propagation.js';
-import { FM_CAPTURE_RATIO_DB, RETRANS_MIN_SEPARATION_MHZ } from './config.js';
+import {
+  FM_CAPTURE_RATIO_DB, RETRANS_MIN_SEPARATION_MHZ, ADJACENT_REJECTION_DB, TX_POWER_W,
+} from './config.js';
 
 /**
  * Adjacent-channel rejection of the receiver's IF filter, in dB.
@@ -32,13 +34,14 @@ import { FM_CAPTURE_RATIO_DB, RETRANS_MIN_SEPARATION_MHZ } from './config.js';
  */
 export function adjacentRejectionDB(offsetKHz) {
   const off = Math.abs(offsetKHz);
-  if (off === 0) return 0;
-  if (off <= 50) return 60;
-  if (off <= 100) return 75;
-  if (off <= 200) return 90;
+  const R = ADJACENT_REJECTION_DB;
+  if (off === 0) return R[0];
+  if (off <= 50) return R[50];
+  if (off <= 100) return R[100];
+  if (off <= 200) return R[200];
   // Keep climbing rather than flattening: without this a very strong local
   // set stays "readable" many channels away, which no real IF filter allows.
-  return Math.min(130, 90 + 30 * Math.log10(off / 200));
+  return Math.min(R.maxDB, R[200] + R.beyondSlopeDB * Math.log10(off / 200));
 }
 
 const distanceM = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
@@ -117,7 +120,7 @@ export class Net {
       live.push({
         station: s,
         freqKHz: s.freqKHz,
-        powerW: 2.0,
+        powerW: TX_POWER_W,
         // [S1] "Transmission - Voice and 150-Hz squelch tone." The set always
         // sends the tone when keyed; there is no switch to suppress it.
         hasTone: true,
@@ -159,7 +162,7 @@ export class Net {
       relayed.push({
         station: partner,
         freqKHz: partner.freqKHz,
-        powerW: 2.0,
+        powerW: TX_POWER_W,
         hasTone: true,
         via: s,
       });

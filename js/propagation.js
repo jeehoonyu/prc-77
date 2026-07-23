@@ -12,18 +12,20 @@
 // reasonable siting, the model must land near it. It does.
 //
 // The model is deliberately the conventional one for this problem:
-//   - monopole gain from the exact current-distribution pattern integral
+//   - monopole gain from the assumed-sinusoidal-current pattern integral
 //   - free-space loss close in, plane-earth (two-ray) loss beyond the breakpoint
 //   - 4/3-earth radio horizon with a diffraction penalty past it
 //   - clutter allowances for the site types the handbook warns about
 //
 // Every engineering allowance that is NOT derived from first principles is
-// tagged ALLOWANCE and collected in ALLOWANCES_DB so it can be inspected,
-// changed, or argued with. Nothing is buried.
+// tagged ALLOWANCE and collected in js/allowances.js so it can be inspected,
+// changed, or argued with. A test enforces that the tags and the registry
+// agree, so the registry cannot quietly fall behind. Nothing is buried.
 
 import {
   TX_POWER_W, RX_SENSITIVITY_UV, RX_INPUT_IMPEDANCE_OHM, ANTENNAS,
   NOISE_ENVIRONMENTS, DEFAULT_NOISE_ENV, IF_BANDWIDTH_HZ, REQUIRED_SNR_DB,
+  READABILITY_THRESHOLDS_DB,
 } from './config.js';
 
 const C = 299792458;              // m/s
@@ -81,15 +83,21 @@ export function effectiveSensitivityDBm(freqHz, env = DEFAULT_NOISE_ENV) {
 // ---------------------------------------------------------------------------
 // Monopole antenna
 // ---------------------------------------------------------------------------
-// Vertical monopole of height h over ground, sinusoidal current distribution.
+// Vertical monopole of height h over ground, ASSUMED sinusoidal current
+// distribution -- a standard thin-wire approximation, not an exact solution.
+// It is least accurate near anti-resonance, which is exactly where the 10 ft
+// whip's behaviour is most interesting, so treat that region as indicative.
 // Far-field pattern at zenith angle t (t = pi/2 is the horizon):
 //
 //     F(t) = [cos(kh*cos t) - cos(kh)] / sin t
 //
-// This is exact for a thin wire and is where the useful behaviour comes from:
-// the 3 ft tape antenna is electrically tiny at 30 MHz (0.09 lambda) and the
-// 10 ft whip passes through half-wave anti-resonance near the top of band B,
-// which is exactly why operators find the long whip works best low in the band.
+// It is where the useful behaviour comes from:
+// the 3 ft tape antenna is electrically tiny at 30 MHz (0.09 lambda), and the
+// 10 ft whip does three different things across the band: half-wave
+// anti-resonance at 49.2 MHz (the top of band A, where the feed impedance
+// runs away), best horizon gain around 60 MHz, then the pattern lifting off
+// the horizon above 0.625 lambda until the whip finally loses to the tape at
+// 73.8 MHz.
 
 function patternF(kh, theta) {
   const s = Math.sin(theta);
@@ -164,15 +172,24 @@ export const COUNTERPOISE_LOSS_DB = { manpack: 2, vehicle: 1, groundPlane: 0 };
 export const MATCH_LOSS_SLOPE_DB = 1.5;   // per decade of transformation ratio
 export const MATCH_LOSS_MAX_DB = 3.0;
 
-export const ALLOWANCES_DB = {
-  GROUND_LOSS_OHM,
-  COUNTERPOISE_LOSS_DB,
-  MATCH_LOSS_SLOPE_DB,
-  MATCH_LOSS_MAX_DB,
-  // ALLOWANCE: clutter, from the siting advice in the handbook —
-  // "Valleys, densely wooded areas, and low places are poor sites."
-  CLUTTER: { open: 0, rolling: 3, lightWoods: 6, denseWoods: 12, urban: 15, valley: 20 },
+// ALLOWANCE: end-fire gain of the AT-984A/G, a 150 ft travelling-wave wire
+// several wavelengths long. Modelled as a single figure with no bearing
+// dependence — see the note in antennaGainDBi().
+export const LONG_WIRE_GAIN_DBI = 6.0;
+
+// ALLOWANCE: smooth-earth diffraction past the radio horizon, as a ramp in
+// fractional over-horizon distance. Soft, not a hard cut-off, so a link can
+// run a little past the geometric horizon before it dies.
+export const DIFFRACTION = { rampDB: 30, curvature: 9, linearDB: 25, maxDB: 120 };
+
+// ALLOWANCE: clutter, from the siting advice in the handbook —
+// "Valleys, densely wooded areas, and low places are poor sites."
+export const CLUTTER = {
+  open: 0, rolling: 3, lightWoods: 6, denseWoods: 12, urban: 15, valley: 20,
 };
+
+// The full audit registry lives in js/allowances.js, which gathers these
+// together with the ones owned by config.js.
 
 /**
  * Realised gain of one of the set's antennas toward the horizon, in dBi.
@@ -186,7 +203,7 @@ export function antennaGainDBi(antennaId, freqHz, mounting = 'manpack') {
   // The 150 ft long wire is not a monopole; it is a travelling-wave wire that
   // radiates off its far end. Treat it separately.
   if (spec.directional) {
-    return 6.0; // ALLOWANCE: end-fire gain of a multi-wavelength long wire.
+    return LONG_WIRE_GAIN_DBI; // end-fire gain of a multi-wavelength long wire
   }
 
   const lambda = C / freqHz;
@@ -246,7 +263,8 @@ export function radioHorizonM(h1M, h2M) {
 }
 
 /**
- * ALLOWANCE: smooth-earth diffraction past the horizon. Loss climbs steeply
+ * Smooth-earth diffraction past the horizon, shaped by DIFFRACTION above.
+ * Loss climbs steeply
  * once the path is obstructed by the earth's bulge. Modelled as a ramp in
  * fractional over-horizon distance, capped so the link simply dies rather
  * than producing absurd numbers.
@@ -255,7 +273,9 @@ export function diffractionLossDB(dM, h1M, h2M) {
   const dh = radioHorizonM(h1M, h2M);
   if (dM <= dh) return 0;
   const excess = dM / dh - 1;
-  return Math.min(120, 30 * Math.log10(1 + 9 * excess) + 25 * excess);
+  return Math.min(DIFFRACTION.maxDB,
+    DIFFRACTION.rampDB * Math.log10(1 + DIFFRACTION.curvature * excess)
+    + DIFFRACTION.linearDB * excess);
 }
 
 /** Total path loss, taking the larger of free-space and plane-earth. */
@@ -263,7 +283,7 @@ export function pathLossDB(dM, freqHz, h1M, h2M, clutter = 'open') {
   const fs = freeSpaceLossDB(dM, freqHz);
   const pe = planeEarthLossDB(dM, h1M, h2M);
   const base = Math.max(fs, pe);
-  const clutterDB = ALLOWANCES_DB.CLUTTER[clutter] ?? 0;
+  const clutterDB = CLUTTER[clutter] ?? 0;
   return base + diffractionLossDB(dM, h1M, h2M) + clutterDB;
 }
 
@@ -322,12 +342,13 @@ export function linkBudget({
  * voice procedure use.
  */
 export function readability(marginDB) {
-  if (marginDB < 0)  return { level: 0, label: 'Nothing heard',        copy: false, noise: 1.00 };
-  if (marginDB < 6)  return { level: 1, label: 'Broken and unreadable',copy: false, noise: 0.75 };
-  if (marginDB < 12) return { level: 2, label: 'Readable with difficulty', copy: true, noise: 0.45 };
-  if (marginDB < 20) return { level: 3, label: 'Readable',             copy: true, noise: 0.20 };
-  if (marginDB < 30) return { level: 4, label: 'Good',                 copy: true, noise: 0.07 };
-  return               { level: 5, label: 'Loud and clear',            copy: true, noise: 0.00 };
+  const T = READABILITY_THRESHOLDS_DB;
+  if (marginDB < T.broken)    return { level: 0, label: 'Nothing heard',            copy: false, noise: 1.00 };
+  if (marginDB < T.difficult) return { level: 1, label: 'Broken and unreadable',    copy: false, noise: 0.75 };
+  if (marginDB < T.readable)  return { level: 2, label: 'Readable with difficulty', copy: true,  noise: 0.45 };
+  if (marginDB < T.good)      return { level: 3, label: 'Readable',                 copy: true,  noise: 0.20 };
+  if (marginDB < T.loudAndClear) return { level: 4, label: 'Good',                  copy: true,  noise: 0.07 };
+  return                             { level: 5, label: 'Loud and clear',           copy: true,  noise: 0.00 };
 }
 
 /**

@@ -71,10 +71,10 @@ export const RX_INPUT_IMPEDANCE_OHM = 50;
 // by 150-Hz signal."  [S1] "Transmission - Voice and 150-Hz squelch tone."
 export const SQUELCH_TONE_HZ = 150;
 
-// FM capture: the receiver's limiter suppresses the weaker of two co-channel
-// signals. Good FM limiters achieve a capture ratio of a fraction of a dB;
-// a 1960s discrete-transistor set is far from that. 6 dB is the conventional
-// engineering figure for a tactical FM set and is used here.
+// ALLOWANCE: FM capture ratio. The receiver's limiter suppresses the weaker of
+// two co-channel signals. Good FM limiters achieve a fraction of a dB; a 1960s
+// discrete-transistor set is far from that. 6 dB is the conventional
+// engineering figure for a tactical FM set. Not sourced.
 export const FM_CAPTURE_RATIO_DB = 6.0;
 
 // ALLOWANCE: IF bandwidth. Not stated in any source consulted. 25 kHz is the
@@ -82,9 +82,41 @@ export const FM_CAPTURE_RATIO_DB = 6.0;
 // convert noise power spectral density into a noise floor.
 export const IF_BANDWIDTH_HZ = 25000;
 
-// The 0.5 uV sensitivity figure is a 10 dB quieting / SINAD reference, so the
-// demodulator needs about 10 dB of signal over noise to deliver that.
+// ALLOWANCE: the 0.5 uV sensitivity figure is a 10 dB quieting / SINAD
+// reference, so the demodulator needs about 10 dB of signal over noise to
+// deliver it. The 10 dB itself is conventional, not quoted by a source.
 export const REQUIRED_SNR_DB = 10;
+
+// ALLOWANCE: adjacent-channel rejection of the receiver's IF filter, in dB, by
+// offset in kHz. The set is specified for better than ~55 dB one channel off;
+// these are conventional figures for a tactical FM set at 50 kHz spacing.
+// Beyond the table the curve keeps climbing — see adjacentRejectionDB().
+export const ADJACENT_REJECTION_DB = {
+  0: 0, 50: 60, 100: 75, 200: 90,
+  beyondSlopeDB: 30,   // per decade of offset past 200 kHz
+  maxDB: 130,
+};
+
+// ALLOWANCE: mapping from link margin to what the operator hears. The bands
+// follow the usual signal-report scale; the exact dB boundaries are judgement.
+export const READABILITY_THRESHOLDS_DB = { broken: 0, difficult: 6, readable: 12, good: 20, loudAndClear: 30 };
+
+// ALLOWANCE: battery discharge shape. The RATINGS are sourced ([S1] currents,
+// voltages and life; [S2] cell count) but the curve joining them is not — no
+// source publishes a discharge characteristic for these packs. It is shaped so
+// that a simulated 9:1 mission stays transmit-capable for very nearly the
+// published life and only then falls into the receive-only window that
+// [S2] 4.09 describes. Changing these numbers changes when the set dies.
+export const BATTERY_CURVE = {
+  plateauDropV: 1.2,      // open-circuit sag from full to empty, before the cliff
+  cliffFraction: 0.01,    // remaining fraction at which terminal voltage collapses
+  cliffDropV: 14,
+  baseResistanceOhm: 0.5,
+  riseResistanceOhm: 1.5, // scales (1 - fraction)^riseExponent
+  riseExponent: 6,
+  kneeFraction: 0.03,     // remaining fraction at which internal resistance knees
+  kneeResistanceOhm: 8,
+};
 
 // ---------------------------------------------------------------------------
 // External noise environment — ITU-R P.372, man-made noise
